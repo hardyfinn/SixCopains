@@ -160,7 +160,7 @@ Set these and leave the rest at default (double-click a knob to reset it).
 
 **Self-steering chords (for arrangement).** Patch Banks with a 16th clock from Live (through the disting NT or VCV's MIDI > CLK). Send a slow random (or Live automation via CV Tools) into **MORPH**, and a slower stepped one into **BANK**. The notes stay in one bank for a while, then the harmony moves, so a loop changes over minutes without you touching it. Try AMOUNT around 25 %, ENV on CYC, GATE long.
 
-**Detroit stabs.** ENV on AR, SLOPE fully left, TIME around 0.15 s, CURVE a little left of centre, FM INDEX linear 20 %. Play chords from the Hapax through MIDI-CV. Raise MORPH on the breakdown with an envelope or Live automation.
+**Detroit stabs.** ENV on AR, SLOPE fully left, TIME around 0.15 s, CURVE a little left of centre, FM INDEX right (all) at 20 %. Play chords from the Hapax through MIDI-CV. Raise MORPH on the breakdown with an envelope or Live automation.
 
 **Six separate friends.** Patch voice outputs 1 to 6 into different effects (delay on 1, a reverb on 5 and 6), keep the rest in the L/R mix. FM INDEX turned left (by voice) makes the higher voices grittier, so voices 5 and 6 behave like a separate part.
 
