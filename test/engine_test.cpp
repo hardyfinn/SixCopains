@@ -115,6 +115,60 @@ int main(int argc, char** argv) {
 		CHECK(std::fabs(frequency(r2.V[0], 4800, 24000) - 261.63f) < 2.f);
 	}
 
+	// INTONE: +1 puts voice n at n times its note, -1 at 1/n; it retunes held notes.
+	{
+		Engine e;
+		e.init(SR);
+		e.params.envMode = kModeASR;
+		e.params.curve = 1.f;
+		e.params.ramp = 0.f;
+		e.params.intone = 1.f;
+		e.setCvVoiceCount(6);
+		for (int v = 0; v < 6; v++) e.cvVoiceOn(v, 45.f, 1.f);  // A2, 110 Hz
+		Run r;
+		render(e, 24000, r);
+		for (int v = 0; v < 6; v++) CHECK(std::fabs(frequency(r.V[v], 4800, 24000) - 110.f * (v + 1)) < 2.f);
+		e.params.intone = -1.f;
+		Run r2;
+		render(e, 48000, r2);
+		CHECK(std::fabs(frequency(r2.V[3], 9600, 48000) - 110.f / 4.f) < 0.5f);
+		e.params.intone = 0.f;
+		Run r3;
+		render(e, 24000, r3);
+		CHECK(std::fabs(frequency(r3.V[5], 4800, 24000) - 110.f) < 1.f);
+	}
+
+	// END: AR flags its voice once when the envelope finishes; cycle flags every cycle.
+	{
+		Engine e;
+		e.init(SR);
+		e.params.envMode = kModeAR;
+		e.params.time = 0.05f;
+		e.setCvVoiceCount(2);
+		e.takeEnds();
+		e.cvVoiceOn(1, 60.f, 1.f);
+		Run r;
+		unsigned seen = 0;
+		int count1 = 0;
+		for (int k = 0; k < 2400; k++) {  // 0.4 s
+			render(e, N, r);
+			unsigned en = e.takeEnds();
+			seen |= en;
+			if (en & 2u) count1++;
+		}
+		CHECK(seen == 2u && count1 == 1);
+		e.params.envMode = kModeCycle;
+		e.params.time = 0.1f;
+		e.cvVoiceOn(0, 60.f, 1.f);
+		int count0 = 0;
+		for (int k = 0; k < 6000; k++) {  // 1 s
+			render(e, N, r);
+			if (e.takeEnds() & 1u) count0++;
+		}
+		printf("END: cycle mode at 0.1 s gave %d ends in 1 s\n", count0);
+		CHECK(count0 >= 9 && count0 <= 11);
+	}
+
 	// Two voices, each with its own gate: voice 2 starts later and stops on its own.
 	{
 		Engine e;

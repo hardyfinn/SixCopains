@@ -13,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FONT_BOLD = os.environ.get("PANEL_FONT_BOLD", "/usr/share/fonts/opentype/inter/Inter-Bold.otf")
 FONT_MED = os.environ.get("PANEL_FONT_MED", "/usr/share/fonts/opentype/inter/Inter-Medium.otf")
 
-W = 152.4   # 30 HP
+W = 182.88  # 36 HP
 H = 128.5
 PAPER = "#F1ECE2"
 INK = "#221E1A"
@@ -34,6 +34,8 @@ MIX_L_X, MIX_R_X = 125.0, 139.0
 B1, B2, B3 = 113.0, 127.0, 141.0
 BR1, BR2, BR3, BR4, BR5 = 46.0, 59.5, 73.0, 87.0, 104.0
 BOUT_V_X, BOUT_G_X = 120.0, 134.0
+IT_X = 167.6
+SCOPE_X, SCOPE_Y, SCOPE_W, SCOPE_H = 155.6, 49.6, 24.0, 58.8
 
 fonts = {}
 
@@ -111,7 +113,7 @@ hint("drive", C1, R1 + 7.4)
 hint("rise / fall", C2, R1 + 7.4)
 hint("sqr  tri  sin", C3, R1 + 7.4)
 hint("x note", C4, R1 + 7.4)
-hint("intone | linear", C5, R1 + 7.4)
+hint("by voice | all", C5, R1 + 7.4)
 LY2 = R2 - 5.6
 label("PAN DRIFT", C1, LY2, 1.7)
 label("OCTAVE", C4, LY2, 1.7)
@@ -195,6 +197,18 @@ add(text("L", MIX_L_X, LIO, 1.9, FONT_BOLD, OUTINK, spacing=0.06))
 add(text("R", MIX_R_X, LIO, 1.9, FONT_BOLD, OUTINK, spacing=0.06))
 add(f'<line x1="116.5" y1="{RIO - 6.8}" x2="116.5" y2="{RIO + 4.0}" stroke="#5A524A" stroke-width="0.35"/>')
 add(text("MIX", 132.0, LIO, 1.6, FONT_MED, "#A89E92"))
+
+# --- intone, scope, end ------------------------------------------------------
+vline(152.4, 14.0, 112.5)
+label("INTONE", IT_X, R1 - 6.8, 2.0, ACCENT)
+hint("under | over", IT_X, R1 + 7.4)
+hint("CV", IT_X, R2 - 5.6, 1.5)
+cv_ring(IT_X, R2)
+add(text("SCOPE", 155.6, SCOPE_Y - 1.6, 1.6, FONT_BOLD, SOFT, anchor="start", spacing=0.1))
+rect(SCOPE_X, SCOPE_Y, SCOPE_W, SCOPE_H, "#161412", 1.4)
+rect(IT_X - 9.2, RIO - 8.8, 18.4, 14.4, OUTBOX)
+add(text("END", IT_X, LIO, 1.9, FONT_BOLD, OUTINK, spacing=0.06))
+hint("trig x6", IT_X, RIO - 8.8 - 1.0, 1.2)
 
 svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}mm" height="{H}mm" viewBox="0 0 {W} {H}">\n'
        + "\n".join(parts) + "\n</svg>\n")

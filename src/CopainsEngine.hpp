@@ -225,6 +225,9 @@ struct Params {
     // VCV: LFO range. Shifts every sounding note (semitones) and lowers the
     // frequency floor, so -96 puts C4 at about 1 Hz.
     float transpose = 0.0f;
+    // VCV: Just Friends-style INTONE. Voice n plays at n^intone times its note:
+    // 0 = all as played, +1 = harmonic series (1x..6x), -1 = undertones (1x..1/6x).
+    float intone = 0.0f;
     float minFreq = 20.0f;
 };
 
@@ -442,6 +445,13 @@ public:
     // VCV: loudest envelope x velocity on each voice, from the last render.
     float voiceLevel(int v) const { return voiceLevel_[v]; }
 
+    // VCV: voices whose envelope reached zero since the last call (bit v = voice v).
+    unsigned takeEnds() {
+        const unsigned e = ends_;
+        ends_ = 0;
+        return e;
+    }
+
     // ---- introspection (tests, display)
 
     float sampleRate() const { return sr_; }
@@ -521,6 +531,11 @@ private:
         }
         sineMix_ = clampf((c - 0.5f) * 2.0f, 0.0f, 1.0f);
 
+        // VCV: INTONE offsets, 12 * log2(n) * intone semitones for voice n
+        static const float kLog2N[kNumVoices] = {0.0f, 1.0f, 1.5849625f, 2.0f, 2.3219281f, 2.5849625f};
+        const float it = clampf(params.intone, -1.0f, 1.0f);
+        for (int v = 0; v < kNumVoices; ++v) intoneSemis_[v] = 12.0f * kLog2N[v] * it;
+
         // fmIndex.abs * Select(fmIndex > 0, [voiceID / 5, 1]), and the noise floor
         // ClipNoise.range(1 - index.lincurve(0, 1, 0, 1, 8), 1) * 2, per voice.
         for (int v = 0; v < kNumVoices; ++v) {
@@ -588,6 +603,9 @@ private:
     }
 
     void segmentDone(Layer& L) {
+        // VCV: an envelope reaching zero (AR end, each cycle, ASR/cycle release)
+        // flags the voice's END output.
+        if (L.stage == kStageFall || L.stage == kStageRelease) ends_ |= 1u << L.voice;
         switch (L.stage) {
         case kStageAttack:
             if (L.mode == kModeAR) {
@@ -777,7 +795,7 @@ private:
 
     void renderLayer(Layer& L, float* outL, float* outR, int n, float* vout, bool toMix) {
         // freq = (freq * bend.midiratio).clip(20, 20000), recomputed only on change
-        const float semis = L.note + (L.bendable ? sm_.bend : 0.0f) + params.transpose;
+        const float semis = L.note + (L.bendable ? sm_.bend : 0.0f) + params.transpose + intoneSemis_[L.voice];
         if (semis != L.semisUsed) {
             L.semisUsed = semis;
             L.freq = clampf(440.0f * exp2Fast((semis - 69.0f) * (1.0f / 12.0f)), clampf(params.minFreq, 0.0005f, 20.0f), maxFreq_);
@@ -952,6 +970,8 @@ private:
     float sineMix_ = 0.0f;
     float voiceFm_[kNumVoices] = {};
     float voiceLevel_[kNumVoices] = {};
+    float intoneSemis_[kNumVoices] = {};
+    unsigned ends_ = 0;
     float noiseLo_[kNumVoices] = {};
     float tanhTable_[kTanhTableSize + 1];
     float filterTable_[kFilterTableSize + 1][3];

@@ -27,6 +27,8 @@ static const float MIX_L_X = 125.f, MIX_R_X = 139.f;
 static const float B1 = 113.f, B2 = 127.f, B3 = 141.f;
 static const float BR1 = 46.f, BR2 = 59.5f, BR3 = 73.f, BR4 = 87.f, BR5 = 104.f;
 static const float BOUT_V_X = 120.f, BOUT_G_X = 134.f;
+static const float IT_X = 167.6f;  // INTONE / scope / END column
+static const float SCOPE_X = 155.6f, SCOPE_Y = 49.6f, SCOPE_W = 24.0f, SCOPE_H = 58.8f;
 static const float DISP_X = 104.f, DISP_Y = 18.6f, DISP_W = 46.f, DISP_H = 18.f;
 }  // namespace layout
 
@@ -64,7 +66,7 @@ struct FmIndexQuantity : ParamQuantity {
 		float v = getValue();
 		int pct = (int)std::round(std::fabs(v) * 100.f);
 		if (pct == 0) return "0%";
-		return string::f("%s %d%%", v < 0.f ? "intone" : "linear", pct);
+		return string::f("%s %d%%", v < 0.f ? "by voice" : "all", pct);
 	}
 };
 
@@ -97,18 +99,18 @@ struct SixCopains : Module {
 		ENUMS(PAN_PARAM, kNumVoices),
 		PLAY_PARAM, CAPTURE_PARAM, RATE_PARAM, RAND_PARAM, AMOUNT_PARAM, BANK_PARAM,
 		VEL_MIN_PARAM, VEL_MAX_PARAM, GATE_LEN_PARAM,
-		RANGE_PARAM,
+		RANGE_PARAM, INTONE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
 		VOCT_INPUT, GATE_INPUT, VEL_INPUT,
 		RAMP_INPUT, CURVE_INPUT, FM_INPUT, SLOPE_INPUT, TIME_INPUT, MORPH_INPUT,
-		CLOCK_INPUT, AMOUNT_INPUT, BANK_INPUT,
+		CLOCK_INPUT, AMOUNT_INPUT, BANK_INPUT, INTONE_INPUT,
 		INPUTS_LEN
 	};
 	enum OutputId {
 		ENUMS(VOICE_OUTPUT, kNumVoices),
-		LEFT_OUTPUT, RIGHT_OUTPUT, BANK_VOCT_OUTPUT, BANK_GATE_OUTPUT,
+		LEFT_OUTPUT, RIGHT_OUTPUT, BANK_VOCT_OUTPUT, BANK_GATE_OUTPUT, END_OUTPUT,
 		OUTPUTS_LEN
 	};
 	enum LightId {
@@ -122,6 +124,11 @@ struct SixCopains : Module {
 	copains::GateDetector gates[kNumVoices];
 	float heldPitch[kNumVoices] = {};
 	bool freeRunning = false;
+	dsp::PulseGenerator endPulse[kNumVoices];
+	static const int kScopeLen = 512;
+	float scope[kNumVoices][kScopeLen] = {};
+	int scopeWrite = 0, scopeCount = 0;
+	bool scopeLfo = false;
 	float freeNote[kNumVoices] = {};
 	int cvCount = 0;
 
@@ -149,7 +156,7 @@ struct SixCopains : Module {
 		configParam<RampQuantity>(RAMP_PARAM, -1.f, 1.f, 0.08f, "Ramp");
 		configParam<CurveQuantity>(CURVE_PARAM, -1.f, 1.f, 1.f, "Curve");
 		configParam(FM_RATIO_PARAM, 0.5f, 2.f, 1.01f, "FM ratio", "x");
-		configParam<FmIndexQuantity>(FM_INDEX_PARAM, -1.f, 1.f, 0.f, "FM index (left: intone, right: linear)");
+		configParam<FmIndexQuantity>(FM_INDEX_PARAM, -1.f, 1.f, 0.f, "FM index (left: grows with voice number, right: same on all)");
 		configParam(PAN_DRIFT_PARAM, 0.f, 1.f, 0.12f, "Pan drift", "%", 0.f, 100.f);
 		configSwitch(ENV_MODE_PARAM, 0.f, 2.f, 0.f, "Envelope", {"AR", "ASR (holds while the gate is high)", "Cycle (repeats while the gate is high)"});
 		configParam<SlopeQuantity>(SLOPE_PARAM, 0.f, 1.f, 0.03f, "Slope");
@@ -181,6 +188,7 @@ struct SixCopains : Module {
 		configParam(VEL_MIN_PARAM, 0.f, 1.f, 40.f / 127.f, "Velocity min", "%", 0.f, 100.f);
 		configParam(VEL_MAX_PARAM, 0.f, 1.f, 100.f / 127.f, "Velocity max", "%", 0.f, 100.f);
 		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"Audio", "LFO (8 octaves down: C4 is about 1 Hz)"});
+		configParam(INTONE_PARAM, -1.f, 1.f, 0.f, "Intone (left: undertones, centre: as played, right: overtones)", "%", 0.f, 100.f);
 		configParam(GATE_LEN_PARAM, 0.01f, 1.f, 0.5f, "Gate length (of the clock interval)", "%", 0.f, 100.f);
 
 		configInput(VOCT_INPUT, "V/OCT (polyphonic: channel n plays voice n)");
@@ -195,11 +203,13 @@ struct SixCopains : Module {
 		configInput(CLOCK_INPUT, "Banks clock");
 		configInput(AMOUNT_INPUT, "Note amount CV");
 		configInput(BANK_INPUT, "Bank CV (1.25 V per bank)");
+		configInput(INTONE_INPUT, "Intone CV");
 		for (int v = 0; v < kNumVoices; v++) configOutput(VOICE_OUTPUT + v, string::f("Voice %d", v + 1));
 		configOutput(LEFT_OUTPUT, "Mix left (mono if R is unpatched)");
 		configOutput(RIGHT_OUTPUT, "Mix right");
 		configOutput(BANK_VOCT_OUTPUT, "Banks V/OCT (6 channels)");
 		configOutput(BANK_GATE_OUTPUT, "Banks gates (6 channels)");
+		configOutput(END_OUTPUT, "End of envelope triggers (6 channels, one per voice)");
 		configLight(PLAY_LIGHT, "Playing");
 
 		lightDivider.setDivision(64);
@@ -251,6 +261,7 @@ struct SixCopains : Module {
 		p.time = 0.0026f * std::exp(knobCv(TIME_PARAM, TIME_INPUT, 0.f, 1.f) * 8.03168474f);
 		p.overlap = params[RETRIG_PARAM].getValue() > 0.5f;
 		p.octave = (int)std::round(params[OCTAVE_PARAM].getValue());
+		p.intone = knobCv(INTONE_PARAM, INTONE_INPUT, -1.f, 1.f);
 		const bool lfo = params[RANGE_PARAM].getValue() > 0.5f;
 		p.transpose = lfo ? -96.f : 0.f;
 		p.minFreq = lfo ? 0.001f : 20.f;
@@ -271,13 +282,10 @@ struct SixCopains : Module {
 	// Polyphonic V/OCT + GATE: channel n plays voice n. A mono gate is shared
 	// by every channel, so it plays the V/OCT channels as a chord.
 	// LFO range with nothing in GATE and Banks stopped: the six voices run
-	// freely as LFOs. Voice n runs at n times the V/OCT pitch (a harmonic
-	// series, like Just Friends' INTONE fully up), or at its own channel's
-	// pitch when V/OCT is polyphonic.
+	// freely as LFOs at the V/OCT pitch (each its own channel's when V/OCT is
+	// polyphonic). INTONE spreads them.
 	float freeRunNote(int v) {
-		const int ch = inputs[VOCT_INPUT].getChannels();
-		if (ch > 1) return voltsToNote(inputs[VOCT_INPUT].getPolyVoltage(v));
-		return voltsToNote(inputs[VOCT_INPUT].getVoltage()) + 12.f * std::log2((float)(v + 1));
+		return voltsToNote(inputs[VOCT_INPUT].getPolyVoltage(v));
 	}
 
 	void processFreeRun() {
@@ -383,6 +391,9 @@ struct SixCopains : Module {
 			if (!stereo)
 				for (int i = 0; i < kBlock; i++) bufR[i] = 0.f;
 			for (int v = 0; v < kNumVoices; v++) voiceLevel[v] = engine.voiceLevel(v);
+			const unsigned ends = engine.takeEnds();
+			for (int v = 0; v < kNumVoices; v++)
+				if (ends & (1u << v)) endPulse[v].trigger(1e-3f);
 			bufPos = 0;
 		}
 		// LFO range: voice outputs reach about +/-4 to 5 V at full velocity
@@ -390,6 +401,19 @@ struct SixCopains : Module {
 		outputs[LEFT_OUTPUT].setVoltage(bufL[bufPos] * kOutVolts);
 		outputs[RIGHT_OUTPUT].setVoltage(bufR[bufPos] * kOutVolts);
 		for (int v = 0; v < kNumVoices; v++) outputs[VOICE_OUTPUT + v].setVoltage(voiceBuf[v][bufPos] * voiceVolts);
+		outputs[END_OUTPUT].setChannels(kNumVoices);
+		for (int v = 0; v < kNumVoices; v++)
+			outputs[END_OUTPUT].setVoltage(endPulse[v].process(args.sampleTime) ? 10.f : 0.f, v);
+
+		// Scope: every 4th sample in audio range (about 43 ms of history),
+		// every 256th in LFO range (about 2.7 s)
+		const bool lfoRange = params[RANGE_PARAM].getValue() > 0.5f;
+		if (++scopeCount >= (lfoRange ? 256 : 4)) {
+			scopeCount = 0;
+			for (int v = 0; v < kNumVoices; v++) scope[v][scopeWrite] = voiceBuf[v][bufPos] * voiceVolts;
+			scopeWrite = (scopeWrite + 1) % kScopeLen;
+			scopeLfo = lfoRange;
+		}
 		bufPos++;
 
 		// Banks outputs: what the player is playing, octave included
@@ -525,6 +549,82 @@ struct CopainsDisplay : Widget {
 	}
 };
 
+// ---------------------------------------------------------------- scope
+
+static const NVGcolor VOICE_COL[kNumVoices] = {
+	nvgRGB(0xF0, 0x8A, 0x3C), nvgRGB(0xF2, 0xC1, 0x4E), nvgRGB(0x8F, 0xD0, 0x6A),
+	nvgRGB(0x6C, 0xC4, 0xB4), nvgRGB(0x7A, 0xA6, 0xF0), nvgRGB(0xC4, 0x8C, 0xF0)};
+
+// Six lanes, one per voice. Audio range: about 21 ms, steadied on a rising
+// zero crossing. LFO range: the last 2.7 s, scrolling.
+struct CopainsScope : Widget {
+	SixCopains* module = nullptr;
+
+	void drawLayer(const DrawArgs& args, int layer) override {
+		if (layer != 1) { Widget::drawLayer(args, layer); return; }
+		NVGcontext* vg = args.vg;
+		const float W = box.size.x, H = box.size.y;
+		nvgBeginPath(vg);
+		nvgRoundedRect(vg, 0, 0, W, H, mm2px(1.4f));
+		nvgFillColor(vg, D_BG);
+		nvgFill(vg);
+		std::shared_ptr<window::Font> font = APP->window->loadFont(asset::system("res/fonts/ShareTechMono-Regular.ttf"));
+		const float pad = mm2px(1.0f);
+		const float laneH = (H - 2 * pad) / kNumVoices;
+		const int N = SixCopains::kScopeLen;
+		const bool lfo = module ? module->scopeLfo : false;
+		const int span = lfo ? N : 256;
+		const float fullScale = lfo ? 5.f : 2.5f;  // volts to the lane's edge
+		for (int v = 0; v < kNumVoices; v++) {
+			const float cy = pad + laneH * (v + 0.5f);
+			nvgBeginPath(vg);
+			nvgMoveTo(vg, pad, cy);
+			nvgLineTo(vg, W - pad, cy);
+			nvgStrokeColor(vg, D_BOX);
+			nvgStrokeWidth(vg, 1.f);
+			nvgStroke(vg);
+			if (font && font->handle >= 0) {
+				nvgFontFaceId(vg, font->handle);
+				nvgFontSize(vg, mm2px(1.8f));
+				nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+				nvgFillColor(vg, D_SOFT);
+				nvgText(vg, pad, cy - laneH / 2 + mm2px(0.2f), string::f("%d", v + 1).c_str(), NULL);
+			}
+			if (!module) continue;
+			const float* buf = module->scope[v];
+			const int end = module->scopeWrite;  // oldest sample
+			// start of the window, in samples back from the newest
+			int start = (end - span + N) % N;
+			if (!lfo) {
+				for (int k = 0; k < N - span - 1; k++) {
+					const int i = (end - span - k + 2 * N) % N;
+					const int j = (i - 1 + N) % N;
+					if (buf[j] <= 0.f && buf[i] > 0.f) { start = i; break; }
+				}
+			}
+			nvgBeginPath(vg);
+			for (int k = 0; k < span; k++) {
+				const float y = cy - clamp(buf[(start + k) % N] / fullScale, -1.f, 1.f) * (laneH * 0.45f);
+				const float x = pad + (W - 2 * pad) * k / (span - 1);
+				if (k == 0) nvgMoveTo(vg, x, y);
+				else nvgLineTo(vg, x, y);
+			}
+			const float lv = clamp(module->voiceLevel[v] * 1.5f, 0.25f, 1.f);
+			nvgStrokeColor(vg, nvgTransRGBAf(VOICE_COL[v], lv));
+			nvgStrokeWidth(vg, 1.3f);
+			nvgLineJoin(vg, NVG_ROUND);
+			nvgStroke(vg);
+		}
+		if (font && font->handle >= 0) {
+			nvgFontSize(vg, mm2px(1.7f));
+			nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+			nvgFillColor(vg, D_SOFT);
+			nvgText(vg, W - pad, pad + mm2px(0.2f), lfo ? "2.7 s" : "21 ms", NULL);
+		}
+		Widget::drawLayer(args, layer);
+	}
+};
+
 // ---------------------------------------------------------------- menu: bank notes
 
 struct NoteQuantity : Quantity {
@@ -583,6 +683,15 @@ struct SixCopainsWidget : ModuleWidget {
 		knob(C3, R3, SixCopains::TIME_PARAM);
 		addParam(createParamCentered<CKSS>(mm2px(Vec(C4, R3)), module, SixCopains::RETRIG_PARAM));
 		addParam(createParamCentered<CKSS>(mm2px(Vec(C4, R4)), module, SixCopains::RANGE_PARAM));
+
+		// Intone, scope, end triggers
+		knob(IT_X, R1, SixCopains::INTONE_PARAM);
+		in(IT_X, R2, SixCopains::INTONE_INPUT);
+		CopainsScope* sc = createWidget<CopainsScope>(mm2px(Vec(SCOPE_X, SCOPE_Y)));
+		sc->box.size = mm2px(Vec(SCOPE_W, SCOPE_H));
+		sc->module = module;
+		addChild(sc);
+		out(IT_X, RIO, SixCopains::END_OUTPUT);
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(C5, R3)), module, SixCopains::MORPH_PARAM));
 		in(C2, R4, SixCopains::SLOPE_INPUT);
 		in(C3, R4, SixCopains::TIME_INPUT);
