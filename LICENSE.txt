@@ -1,0 +1,12 @@
+6 Copains for VCV Rack
+Copyright (C) 2026 Haer
+
+Based on 6Copains for disting NT, Copyright (C) Mark IJzerman
+(https://github.com/markijzerman/6copains), itself a port of nb_monamie by
+sonoCircuit (https://github.com/sonocircuit/nb_monamie), whose waveshaping
+comes from the Imaginary Friends engine by @synthetivv. Both are GPL-3.0.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version. See https://www.gnu.org/licenses/gpl-3.0.html

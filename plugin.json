@@ -1,0 +1,23 @@
+{
+  "slug": "SixCopains",
+  "name": "6 Copains",
+  "version": "2.0.0",
+  "license": "GPL-3.0-or-later",
+  "brand": "Haer",
+  "author": "Haer",
+  "authorEmail": "",
+  "authorUrl": "",
+  "pluginUrl": "",
+  "manualUrl": "",
+  "sourceUrl": "https://github.com/hardyfinn/SixCopains",
+  "donateUrl": "",
+  "changelogUrl": "",
+  "modules": [
+    {
+      "slug": "SixCopains",
+      "name": "6 Copains",
+      "description": "Six Just Friends-style voices with morph, per-voice outputs and a built-in Banks note player. A port of 6Copains for disting NT by Mark IJzerman (after nb_monamie by sonoCircuit)",
+      "tags": ["Synth voice", "Polyphonic", "Oscillator", "Low-pass gate", "Random", "Sequencer"]
+    }
+  ]
+}
