@@ -97,6 +97,7 @@ struct SixCopains : Module {
 		ENUMS(PAN_PARAM, kNumVoices),
 		PLAY_PARAM, CAPTURE_PARAM, RATE_PARAM, RAND_PARAM, AMOUNT_PARAM, BANK_PARAM,
 		VEL_MIN_PARAM, VEL_MAX_PARAM, GATE_LEN_PARAM,
+		RANGE_PARAM,
 		PARAMS_LEN
 	};
 	enum InputId {
@@ -120,6 +121,8 @@ struct SixCopains : Module {
 	copains::BanksPlayer banks;
 	copains::GateDetector gates[kNumVoices];
 	float heldPitch[kNumVoices] = {};
+	bool freeRunning = false;
+	float freeNote[kNumVoices] = {};
 	int cvCount = 0;
 
 	float bufL[kBlock] = {}, bufR[kBlock] = {};
@@ -177,6 +180,7 @@ struct SixCopains : Module {
 		getParamQuantity(BANK_PARAM)->snapEnabled = true;
 		configParam(VEL_MIN_PARAM, 0.f, 1.f, 40.f / 127.f, "Velocity min", "%", 0.f, 100.f);
 		configParam(VEL_MAX_PARAM, 0.f, 1.f, 100.f / 127.f, "Velocity max", "%", 0.f, 100.f);
+		configSwitch(RANGE_PARAM, 0.f, 1.f, 0.f, "Range", {"Audio", "LFO (8 octaves down: C4 is about 1 Hz)"});
 		configParam(GATE_LEN_PARAM, 0.01f, 1.f, 0.5f, "Gate length (of the clock interval)", "%", 0.f, 100.f);
 
 		configInput(VOCT_INPUT, "V/OCT (polyphonic: channel n plays voice n)");
@@ -205,6 +209,7 @@ struct SixCopains : Module {
 	void onSampleRateChange(const SampleRateChangeEvent& e) override {
 		engine.init(e.sampleRate);
 		cvCount = 0;
+		freeRunning = false;
 		for (int v = 0; v < kNumVoices; v++) gates[v] = copains::GateDetector();
 		bufPos = kBlock;
 	}
@@ -216,6 +221,7 @@ struct SixCopains : Module {
 		outsLeaveMix = true;
 		engine.init(APP->engine->getSampleRate());
 		cvCount = 0;
+		freeRunning = false;
 		for (int v = 0; v < kNumVoices; v++) gates[v] = copains::GateDetector();
 	}
 
@@ -245,6 +251,9 @@ struct SixCopains : Module {
 		p.time = 0.0026f * std::exp(knobCv(TIME_PARAM, TIME_INPUT, 0.f, 1.f) * 8.03168474f);
 		p.overlap = params[RETRIG_PARAM].getValue() > 0.5f;
 		p.octave = (int)std::round(params[OCTAVE_PARAM].getValue());
+		const bool lfo = params[RANGE_PARAM].getValue() > 0.5f;
+		p.transpose = lfo ? -96.f : 0.f;
+		p.minFreq = lfo ? 0.001f : 20.f;
 		p.morph = knobCv(MORPH_PARAM, MORPH_INPUT, 0.f, 1.f);
 		p.rampMod = params[RAMP_MOD_PARAM].getValue();
 		p.curveMod = params[CURVE_MOD_PARAM].getValue();
@@ -261,10 +270,53 @@ struct SixCopains : Module {
 
 	// Polyphonic V/OCT + GATE: channel n plays voice n. A mono gate is shared
 	// by every channel, so it plays the V/OCT channels as a chord.
+	// LFO range with nothing in GATE and Banks stopped: the six voices run
+	// freely as LFOs. Voice n runs at n times the V/OCT pitch (a harmonic
+	// series, like Just Friends' INTONE fully up), or at its own channel's
+	// pitch when V/OCT is polyphonic.
+	float freeRunNote(int v) {
+		const int ch = inputs[VOCT_INPUT].getChannels();
+		if (ch > 1) return voltsToNote(inputs[VOCT_INPUT].getPolyVoltage(v));
+		return voltsToNote(inputs[VOCT_INPUT].getVoltage()) + 12.f * std::log2((float)(v + 1));
+	}
+
+	void processFreeRun() {
+		if (!freeRunning) {
+			engine.setCvVoiceCount(kNumVoices);
+			// AR would stop after one cycle of the envelope: hold instead.
+			const int mode = engine.params.envMode;
+			if (mode == copains::kModeAR) engine.params.envMode = copains::kModeASR;
+			for (int v = 0; v < kNumVoices; v++) {
+				freeNote[v] = freeRunNote(v);
+				engine.cvVoiceOn(v, freeNote[v], 1.f);
+			}
+			engine.params.envMode = mode;
+			freeRunning = true;
+		}
+		cvCount = kNumVoices;
+		for (int v = 0; v < kNumVoices; v++) {
+			const float n = freeRunNote(v);
+			if (n != freeNote[v]) {
+				freeNote[v] = n;
+				engine.cvSetNote(v, n);
+			}
+		}
+	}
+
 	void processCvVoices() {
+		const bool lfo = params[RANGE_PARAM].getValue() > 0.5f;
+		const bool playing = params[PLAY_PARAM].getValue() > 0.5f;
+		if (lfo && !inputs[GATE_INPUT].isConnected() && !playing) {
+			processFreeRun();
+			return;
+		}
 		int count = 0;
 		if (inputs[GATE_INPUT].isConnected())
 			count = clamp(std::max(inputs[VOCT_INPUT].getChannels(), inputs[GATE_INPUT].getChannels()), 1, kNumVoices);
+		if (freeRunning) {
+			engine.setCvVoiceCount(0);  // fade the free voices out
+			freeRunning = false;
+		}
 		if (count != engine.cvVoiceCount()) {
 			engine.setCvVoiceCount(count);
 			for (int v = 0; v < kNumVoices; v++) gates[v] = copains::GateDetector();
@@ -333,9 +385,11 @@ struct SixCopains : Module {
 			for (int v = 0; v < kNumVoices; v++) voiceLevel[v] = engine.voiceLevel(v);
 			bufPos = 0;
 		}
+		// LFO range: voice outputs reach about +/-4 to 5 V at full velocity
+		const float voiceVolts = params[RANGE_PARAM].getValue() > 0.5f ? kOutVolts * 2.f : kOutVolts;
 		outputs[LEFT_OUTPUT].setVoltage(bufL[bufPos] * kOutVolts);
 		outputs[RIGHT_OUTPUT].setVoltage(bufR[bufPos] * kOutVolts);
-		for (int v = 0; v < kNumVoices; v++) outputs[VOICE_OUTPUT + v].setVoltage(voiceBuf[v][bufPos] * kOutVolts);
+		for (int v = 0; v < kNumVoices; v++) outputs[VOICE_OUTPUT + v].setVoltage(voiceBuf[v][bufPos] * voiceVolts);
 		bufPos++;
 
 		// Banks outputs: what the player is playing, octave included
@@ -528,6 +582,7 @@ struct SixCopainsWidget : ModuleWidget {
 		knob(C2, R3, SixCopains::SLOPE_PARAM);
 		knob(C3, R3, SixCopains::TIME_PARAM);
 		addParam(createParamCentered<CKSS>(mm2px(Vec(C4, R3)), module, SixCopains::RETRIG_PARAM));
+		addParam(createParamCentered<CKSS>(mm2px(Vec(C4, R4)), module, SixCopains::RANGE_PARAM));
 		addParam(createParamCentered<RoundLargeBlackKnob>(mm2px(Vec(C5, R3)), module, SixCopains::MORPH_PARAM));
 		in(C2, R4, SixCopains::SLOPE_INPUT);
 		in(C3, R4, SixCopains::TIME_INPUT);

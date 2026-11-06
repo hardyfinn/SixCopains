@@ -8,7 +8,7 @@ It is a port of [6Copains](https://github.com/markijzerman/6copains) for the Exp
 
 ## Install
 
-1. Download `SixCopains-2.0.0-mac-arm64.vcvplugin` from this repository's **Releases** page (the "latest" release).
+1. Download `SixCopains-2.1.0-mac-arm64.vcvplugin` from this repository's **Releases** page (the "latest" release).
 2. Put it in `Documents/Rack2/plugins-mac-arm64/` and restart Rack. Rack unpacks it on start.
 3. Find it in the module browser under **Haer > 6 Copains**.
 
@@ -44,6 +44,14 @@ Patch a polyphonic V/OCT (for example a chord from a sequencer or a quantizer) a
 | **FM INDEX** | FM depth, with noise that rises sharply near full. **Right of centre (linear)**: every voice gets the same depth. **Left (intone)**: depth rises with the voice number, from none on voice 1 to full on voice 6. CV input below. |
 | **PAN DRIFT** | A random pan offset for each new note. |
 | **OCTAVE** | Shifts every note by -3 to +3 octaves (also the Banks outputs). |
+
+### Range: audio or LFO
+
+The **RANGE** switch (under RETRIG) drops every voice 8 octaves. In **LFO** (up), C4 is about 1 Hz, and V/OCT still works at 1 V per octave, so +2 V is about 4 Hz and -3 V is one cycle every 8 seconds. Everything else still applies: RAMP, CURVE and FM shape the LFO, and MORPH moves it. Flipping the switch retunes the voices that are already playing.
+
+- **Free-running:** with nothing in GATE and Banks stopped, the six voices run on their own. Voice *n* runs at *n* times the V/OCT pitch (1, 2, 3, 4, 5, 6 Hz with V/OCT unpatched), like Just Friends' INTONE fully up. A polyphonic V/OCT sets each voice's rate instead. ENV on CYC adds a cycling envelope on top, as tremolo.
+- **Gated:** with GATE patched, or Banks playing, each voice is an LFO that starts from zero on its gate and is shaped by the envelope. With Banks, that's six randomly retriggered modulation shapes.
+- Use the voice outputs **1 to 6** for modulation. In LFO range they swing about +/-4 to 5 V at full velocity. The low-pass gate passes LFOs, but LEVEL and velocity set their depth.
 
 ### Envelope
 
@@ -131,6 +139,8 @@ Set these and leave the rest at default (double-click a knob to reset it).
 
 ## Patch ideas
 
+**Six related LFOs.** RANGE on LFO, nothing in GATE. Voices 1 to 6 now run at 1x to 6x the same rate, all in phase every few seconds. Send them to filter cutoffs, Marbles' bias, or out through the disting NT to the modular. Turn FM INDEX to intone and the faster ones get wobbly while voice 1 stays steady.
+
 **Self-steering chords (for arrangement).** Patch Banks with a 16th clock from Live (through the disting NT or VCV's MIDI > CLK). Send a slow random (or Live automation via CV Tools) into **MORPH**, and a slower stepped one into **BANK**. The notes stay in one bank for a while, then the harmony moves, so a loop changes over minutes without you touching it. Try AMOUNT around 25 %, ENV on CYC, GATE long.
 
 **Detroit stabs.** ENV on AR, SLOPE fully left, TIME around 0.15 s, CURVE a little left of centre, FM INDEX linear 20 %. Play chords from the Hapax through MIDI-CV. Raise MORPH on the breakdown with an envelope or Live automation.
@@ -146,6 +156,7 @@ Set these and leave the rest at default (double-click a knob to reset it).
 - **Separate voice outputs** with voice lights, and a display.
 - **Banks is built in**, with a CLOCK input, CV for AMOUNT and BANK, chord CAPTURE, and polyphonic outputs. On the NT it is a separate Lua script.
 - No direct MIDI, sustain or pitch bend: use VCV's MIDI-CV for those.
+- **RANGE** switch for LFO rates, with free-running voices. Not in the NT version.
 - Output level is the NT's default +6 dB: one full-velocity voice peaks around 2.3 V on its own output.
 
 ## Building

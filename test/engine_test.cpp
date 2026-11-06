@@ -86,6 +86,35 @@ int main(int argc, char** argv) {
 		CHECK(e.voiceLevel(0) == 0.f);
 	}
 
+	// LFO range: 8 octaves down puts C4 near 1 Hz; a held note can be retuned live.
+	{
+		Engine e;
+		e.init(SR);
+		e.params.envMode = kModeASR;
+		e.params.time = 0.01f;
+		e.params.ramp = 0.f;
+		e.params.curve = 1.f;
+		e.params.transpose = -96.f;
+		e.params.minFreq = 0.001f;
+		e.setCvVoiceCount(6);
+		e.cvVoiceOn(0, 60.f, 1.f);
+		e.cvVoiceOn(5, 60.f + 12.f * std::log2(6.f), 1.f);
+		Run r;
+		render(e, 48000 * 6, r);
+		float f0 = frequency(r.V[0], 4800, r.V[0].size());
+		float f5 = frequency(r.V[5], 4800, r.V[5].size());
+		printf("LFO: voice 1 %.3f Hz, voice 6 %.3f Hz, voice 1 peak %.3f\n", f0, f5, peak(r.V[0]));
+		CHECK(std::fabs(f0 - 261.6256f / 256.f) < 0.05f);
+		CHECK(std::fabs(f5 - 6.f * 261.6256f / 256.f) < 0.1f);
+		CHECK(peak(r.V[0]) > 0.15f);  // the low-pass gate passes the LFO
+		CHECK(finite(r.V[0]));
+		e.params.transpose = 0.f;  // back to audio: the same note jumps up
+		e.params.minFreq = 20.f;
+		Run r2;
+		render(e, 24000, r2);
+		CHECK(std::fabs(frequency(r2.V[0], 4800, 24000) - 261.63f) < 2.f);
+	}
+
 	// Two voices, each with its own gate: voice 2 starts later and stops on its own.
 	{
 		Engine e;

@@ -222,6 +222,10 @@ struct Params {
     // instead of fading it out over 50 ms.
     bool overlap = false;
     int octave = 0;  // NT: transposes every note it starts (MIDI and CV), -3..+3
+    // VCV: LFO range. Shifts every sounding note (semitones) and lowers the
+    // frequency floor, so -96 puts C4 at about 1 Hz.
+    float transpose = 0.0f;
+    float minFreq = 20.0f;
 };
 
 struct Layer {
@@ -773,10 +777,10 @@ private:
 
     void renderLayer(Layer& L, float* outL, float* outR, int n, float* vout, bool toMix) {
         // freq = (freq * bend.midiratio).clip(20, 20000), recomputed only on change
-        const float semis = L.note + (L.bendable ? sm_.bend : 0.0f);
+        const float semis = L.note + (L.bendable ? sm_.bend : 0.0f) + params.transpose;
         if (semis != L.semisUsed) {
             L.semisUsed = semis;
-            L.freq = clampf(440.0f * exp2Fast((semis - 69.0f) * (1.0f / 12.0f)), 20.0f, maxFreq_);
+            L.freq = clampf(440.0f * exp2Fast((semis - 69.0f) * (1.0f / 12.0f)), clampf(params.minFreq, 0.0005f, 20.0f), maxFreq_);
         }
         Block b;
         b.inc = L.freq * invSr_;
