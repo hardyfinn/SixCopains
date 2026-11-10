@@ -18,18 +18,18 @@ using copains::kBankNotes;
 
 // Panel positions in mm. res/make_panel.py draws the labels at the same places.
 namespace layout {
-static const float R1 = 25.f, R2 = 41.5f, R3 = 61.f, R4 = 75.5f, R5 = 91.5f, R6 = 107.5f, RIO = 120.5f;
-static const float C1 = 12.f, C2 = 31.f, C3 = 50.f, C4 = 69.f, C5 = 88.f;
-static const float PAN_X[6] = {10.f, 26.f, 42.f, 58.f, 74.f, 90.f};
-static const float IN_X[3] = {10.f, 21.f, 32.f};
-static const float OUT_X[6] = {47.f, 59.f, 71.f, 83.f, 95.f, 107.f};
-static const float MIX_L_X = 125.f, MIX_R_X = 139.f;
-static const float B1 = 113.f, B2 = 127.f, B3 = 141.f;
-static const float BR1 = 46.f, BR2 = 59.5f, BR3 = 73.f, BR4 = 87.f, BR5 = 104.f;
-static const float BOUT_V_X = 120.f, BOUT_G_X = 134.f;
-static const float IT_X = 167.6f;  // INTONE / scope / END column
-static const float SCOPE_X = 155.6f, SCOPE_Y = 49.6f, SCOPE_W = 24.0f, SCOPE_H = 58.8f;
-static const float DISP_X = 104.f, DISP_Y = 18.6f, DISP_W = 46.f, DISP_H = 18.f;
+static const float R1 = 24.5f, R2 = 43.f, R3 = 62.f, R4 = 76.5f, R5 = 92.f, R6 = 107.5f, RIO = 120.5f;
+static const float C1 = 13.f, C2 = 36.f, C3 = 59.f, C4 = 82.f, C5 = 105.f;
+static const float PAN_X[6] = {11.f, 30.f, 49.f, 68.f, 87.f, 106.f};
+static const float IN_X[3] = {10.f, 23.f, 36.f};
+static const float OUT_X[6] = {50.f, 63.f, 76.f, 89.f, 102.f, 115.f};
+static const float MIX_L_X = 130.f, MIX_R_X = 144.f;
+static const float B1 = 134.f, B2 = 151.f, B3 = 168.f;
+static const float BR1 = 46.f, BR2 = 60.5f, BR3 = 74.f, BR4 = 88.f, BR5 = 104.f;
+static const float BOUT_V_X = 143.f, BOUT_G_X = 159.f;
+static const float IT_X = 197.6f;  // INTONE / scope / END column
+static const float SCOPE_X = 185.6f, SCOPE_Y = 49.6f, SCOPE_W = 24.0f, SCOPE_H = 58.8f;
+static const float DISP_X = 124.f, DISP_Y = 18.6f, DISP_W = 52.f, DISP_H = 18.f;
 }  // namespace layout
 
 static const char* const kNoteLetters[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
