@@ -215,3 +215,9 @@ svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}mm" height="{H}mm" vi
 with open(os.path.join(HERE, "SixCopains.svg"), "w") as fh:
     fh.write(svg)
 print("wrote SixCopains.svg")
+
+# --- Haer maker logo (res/haer_logo.py), placed clear of the jacks and rail artwork
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import haer_logo
+haer_logo.add_to_file(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "SixCopains.svg"), x=160.64, y=126.0, cap=3.0, bg='#F1ECE2', knock=(125.55, 126.65))
