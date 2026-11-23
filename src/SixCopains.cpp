@@ -152,7 +152,7 @@ struct SixCopains : Module {
 	SixCopains() {
 		config(PARAMS_LEN, INPUTS_LEN, OUTPUTS_LEN, LIGHTS_LEN);
 		// Sound (defaults are nb_monamie's default patch)
-		configParam(LEVEL_PARAM, 0.f, 1.f, 0.8f, "Level (drive)", "%", 0.f, 100.f);
+		configParam(LEVEL_PARAM, 0.f, 1.f, 0.8f, "Level (drive)", "%", 0.f, 100.f)->randomizeEnabled = false;
 		configParam<RampQuantity>(RAMP_PARAM, -1.f, 1.f, 0.08f, "Ramp");
 		configParam<CurveQuantity>(CURVE_PARAM, -1.f, 1.f, 1.f, "Curve");
 		configParam(FM_RATIO_PARAM, 0.5f, 2.f, 1.01f, "FM ratio", "x");
